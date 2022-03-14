@@ -1,0 +1,287 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: An AWS Serverless Application that uses the ASP.NET Core framework running in Amazon Lambda.
+Parameters:
+
+  DBUsername:
+    NoEcho: 'true'
+    Description: Username for MySQL database access
+    Type: String
+    Default: admin
+    MinLength: '1'
+    MaxLength: '16'
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: must begin with a letter and contain only alphanumeric characters.
+  DBPassword:
+    NoEcho: 'true'
+    Description: Password MySQL database access
+    Type: String
+    Default: helloworld
+    MinLength: '8'
+    MaxLength: '41'
+    AllowedPattern: '[a-zA-Z0-9]*'
+    ConstraintDescription: must contain only alphanumeric characters.
+
+  BucketName:
+    Type: String
+    Default: upworktestbucket4201112
+
+  ImageURI:
+    Type: String
+    Default: 209582769394.dkr.ecr.us-east-1.amazonaws.com/dev-ecr:latest
+
+  ImageTag:
+    Description: The tag of the container image
+    Type: String
+
+  ImageRepositoryName:
+    Type: String
+    Default: dev-ecr
+
+  Enviroment:
+    Type: String
+    Default: testing
+
+  dbUserName:
+    Type: String
+    NoEcho: true
+    Default: upwork
+
+  DbSize:
+    Type: String
+    Default: db.t2.small
+
+  EFSpath:
+    Type: String
+    Default: /mnt/testing
+
+
+Resources:
+  ApplicationBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 172.31.0.0/16
+      EnableDnsHostnames: True
+      EnableDnsSupport: True
+      Tags:
+        - Key: Name
+          Value: !Sub "${Enviroment}-VPC"
+
+  SubnetOne:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: 172.31.2.0/24
+      VpcId: !Ref VPC
+      AvailabilityZone: "us-east-1a"
+      Tags:
+        - Key: Name
+          Value: !Sub "${Enviroment}-pipeline-subnet1"
+
+  SubnetTwo:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: 172.31.10.0/24
+      VpcId: !Ref VPC
+      AvailabilityZone: "us-east-1b"
+      Tags:
+        - Key: Name
+          Value: !Sub "${Enviroment}-pipeline-subnet2"
+
+
+  #  MountTargetSubnetThree:
+  #    Type: AWS::EC2::Subnet
+  #    Properties:
+  #      CidrBlock: 172.31.3.0/24
+  #      VpcId: !Ref MountTargetVPC
+  #      AvailabilityZone: "us-east-1c"
+  #      Tags:
+  #        - Key: "pipeline-subnet"
+  #          Value: "3"
+
+  FileSystemResource:
+    Type: 'AWS::EFS::FileSystem'
+    Properties:
+      PerformanceMode: maxIO
+      Encrypted: true
+      FileSystemTags:
+        - Key: Name
+          Value: !Sub "${Enviroment}-TestFileSystem"
+      FileSystemPolicy:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Action:
+              - "elasticfilesystem:ClientMount"
+            Principal:
+              AWS: "*"
+  SecurityGroupEFS:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "EFS Security group"
+      GroupName: !Sub "${Enviroment}-EFS-SG"
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${Enviroment}-EFS-SG"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '2049'
+          ToPort: '2049'
+          SourceSecurityGroupId: !Ref SecurityGroupLambda
+
+  SecurityGroupDB:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "DB Security group"
+      GroupName: !Sub "${Enviroment}-DB-SG"
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${Enviroment}-DB-SG"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '3306'
+          ToPort: '3306'
+          SourceSecurityGroupId: !Ref SecurityGroupLambda
+
+  SecurityGroupLambda:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Instances security group"
+      GroupName: !Sub "${Enviroment}-Lambda-SG"
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${Enviroment}-Lambda-SG"
+
+  MountTargetResource1:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref FileSystemResource
+      SubnetId: !Ref SubnetOne
+      SecurityGroups:
+        - !Ref SecurityGroupEFS
+
+  AccessPointResource:
+    Type: 'AWS::EFS::AccessPoint'
+    Properties:
+      #      AccessPointTags:
+      #        - key: "dev"
+      FileSystemId: !Ref FileSystemResource
+      PosixUser:
+        Uid: "1000"
+        Gid: "1000"
+      RootDirectory:
+        CreationInfo:
+          OwnerGid: "1000"
+          OwnerUid: "1000"
+          Permissions: "0777"
+        Path:  !Sub "${EFSpath}"
+
+
+  AspNetCoreFunction:
+    Type: AWS::Serverless::Function
+    DependsOn:
+      - FileSystemResource
+      - MountTargetResource1
+    Properties:
+      PackageType: Image
+      VpcConfig:
+        SecurityGroupIds:
+          - !GetAtt SecurityGroupLambda.GroupId
+        SubnetIds:
+          - !Ref SubnetOne
+      FileSystemConfigs:
+        - Arn: !GetAtt AccessPointResource.Arn
+          LocalMountPath: "/mnt/storage"
+          #LocalMountPath: !Sub "/mnt/${Enviroment}"  // You may want to uncomment this in case you want environment mount.
+      ImageConfig:
+        Command:
+          - lambda::lambda.LambdaEntryPoint::FunctionHandlerAsync
+      ImageUri: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ImageRepositoryName}:${ImageTag}"
+      MemorySize: 256
+      Timeout: 60
+      Environment:
+        Variables: # These are the environment variables that get passed onto the source code.
+          bucketName: !Sub ${ApplicationBucket}
+          region: !Sub ${AWS::Region}
+          DBendpoint: !GetAtt AuroraCluster.Endpoint.Address
+          DBusername: !Ref DBUsername
+          DBpassword: !Ref DBPassword
+
+      Role: null
+      Policies:
+        - AWSLambda_FullAccess
+        - AmazonElasticFileSystemClientFullAccess
+        - Statement:
+            - Sid: AWSLambdaVPCAccessExecutionRole
+              Effect: Allow
+              Action:
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+                - ec2:CreateNetworkInterface
+                - ec2:DescribeNetworkInterfaces
+                - ec2:DeleteNetworkInterface
+              Resource: "*"
+      Events:
+        ProxyResource:
+          Type: Api
+          Properties:
+            Path: /{proxy+}
+            Method: ANY
+        RootResource:
+          Type: Api
+          Properties:
+            Path: /
+            Method: ANY
+    Metadata:
+      Dockerfile: Dockerfile
+      DockerContext: .
+      DockerTag: ''
+
+  AuroraSubnetGroup:
+    Type: "AWS::RDS::DBSubnetGroup"
+    Properties:
+      DBSubnetGroupDescription: "Subnet Group for Aurora Serverless"
+      #DBSubnetGroupName: !Sub "${Enviroment}-Subnet-Group"  // This Can't work. This property requires lower-case string value.
+      SubnetIds:
+        - !Ref SubnetOne
+        - !Ref SubnetTwo
+  AuroraCluster:
+    Type: 'AWS::RDS::DBCluster'
+    Properties:
+      DBSubnetGroupName: !Ref AuroraSubnetGroup
+      VpcSecurityGroupIds:
+        - !Ref SecurityGroupDB
+      MasterUsername: !Ref DBUsername
+      MasterUserPassword: !Ref DBPassword
+      DBClusterIdentifier: !Sub "${Enviroment}-Aurora-Cluster"
+      Engine: aurora-mysql
+      EngineVersion:  5.7.mysql_aurora.2.07.1
+      EngineMode: serverless
+      EnableHttpEndpoint: true #Enable the Data API
+      ScalingConfiguration:
+        AutoPause: true
+        MinCapacity: 1
+        MaxCapacity: 32
+        SecondsUntilAutoPause: 1000
+
+Outputs:
+  ApiURL:
+    Description: 'API endpoint URL'
+    Value:
+      Fn::Sub: https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/
+  LambdaSecurityGroup:
+    Description: 'Lambda security group'
+    Value: !Sub ${SecurityGroupLambda}
+  EFSSecurityGroup:
+    Description: 'EFS security group'
+    Value: !Sub ${SecurityGroupEFS}
+  ClusterEndpoint:
+    Description: 'Aurora Cluster/Writer Endpoint'
+    Value: !GetAtt AuroraCluster.Endpoint.Address
+

@@ -1,0 +1,46 @@
+# This file specifies the instructions to the build the dev environment in CodeBuild.
+version: 0.2
+
+# https://stackoverflow.com/questions/68361522/buildspec-yml-to-push-to-ecr-is-throwing-this-error-command-did-not-exit-succes
+# https://docs.aws.amazon.com/cli/latest/reference/ecr/get-login-password.html
+# https://stackoverflow.com/questions/62579463/how-can-i-build-a-docker-image-with-codebuild
+
+phases:
+  install:
+    runtime-versions:
+      docker: 18
+    commands:
+      #  Allow Docker to run inside the Codebuild Docker container.
+      - nohup /usr/local/bin/dockerd --host=unix:///var/run/docker.sock --host=tcp://127.0.0.1:2375 --storage-driver=overlay2&
+      - timeout 15 sh -c "until docker info; do echo .; sleep 1; done"
+
+  pre_build:
+    commands:
+      - echo Logging in to Amazon ECR...
+      - aws --version
+      - printenv
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+      - TAG="$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | head -c 8)"
+      - IMAGE_REPO_NAME="dev-ecr"
+
+  build:
+    commands:
+      - pwd
+      - echo print working directory
+      - echo Build started on `date`
+      - echo Building Docker Image
+      - cd lambda/src/lambda
+      - docker build -t $IMAGE_REPO_NAME:$TAG .
+      - echo Build completed on `date`
+      - docker tag $IMAGE_REPO_NAME:$TAG $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME:$TAG
+
+  post_build:
+    commands:
+      - echo Pushing the Docker image...
+      - docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME:$TAG
+      - echo "{\"CommitHash\":\"$TAG\"}" >  $CODEBUILD_SRC_DIR/build.hash.json
+
+artifacts:
+  files:
+    - build.hash.json
+    - ./**/*

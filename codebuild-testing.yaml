@@ -1,0 +1,48 @@
+# This file specifies the instructions to the build the testing environment in CodeBuild.
+# It only unit-tests the source code. If the unit-test fails, this build fails, which fails the pipeline.
+#
+
+version: 0.2
+# https://stackoverflow.com/questions/68361522/buildspec-yml-to-push-to-ecr-is-throwing-this-error-command-did-not-exit-succes
+# https://docs.aws.amazon.com/cli/latest/reference/ecr/get-login-password.html
+# https://stackoverflow.com/questions/62579463/how-can-i-build-a-docker-image-with-codebuild
+
+phases:
+  install:
+    runtime-versions:
+      docker: 18
+    commands:
+      #  Allow Docker to run inside the Codebuild Docker container.
+      - nohup /usr/local/bin/dockerd --host=unix:///var/run/docker.sock --host=tcp://127.0.0.1:2375 --storage-driver=overlay2&
+      - timeout 15 sh -c "until docker info; do echo .; sleep 1; done"
+
+  pre_build: #
+    commands:
+      - echo Logging in to Amazon ECR...
+      - aws --version
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+      - echo Unit Testing started on `date`
+      - echo $HOME
+      - cd lambda/
+      - docker build -t testing .
+      - TAG="$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | head -c 8)"
+      - IMAGE_REPO_NAME="testing-ecr"
+
+  build:
+    commands:
+       - echo Build started on `date`
+       - echo Building Docker Image
+       - cd src/lambda
+      # - docker build -t $IMAGE_REPO_NAME:$TAG .                                          #WE DON"T NEED TO PUSH THE IMAGE OUT TO ECR-TESTING
+      # - docker tag $IMAGE_REPO_NAME:$TAG $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME:$TAG  #WE DON"T NEED TO  PUSH THE IMAGE OUT TO ECR-TESTING
+       -
+  post_build:
+    commands:
+      - echo Build completed on `date`
+      - echo Pushing the Docker image...
+      #- docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME:$TAG # WE DON't NEED TO PUSH THE IMAGE OUT TO TESTING
+      - echo "{\"CommitHash\":\"$TAG\"}" >  $CODEBUILD_SRC_DIR/build.hash.json
+artifacts:
+  files:
+    - build.hash.json
+    - ./**/*

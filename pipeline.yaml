@@ -1,0 +1,376 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Cloudformation template  for creating an AWS pipeline complete with Staging,Test, and production environments.
+Parameters:
+  GitHubOAuthToken:
+    Type: String
+    Default: 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   #Hellotamarann Github Token. Change this to  your own token.
+    NoEcho: true
+    MinLength: 40
+    MaxLength: 40
+  GitHubOwner:
+    Type: String
+    Default: hellotamarran
+    AllowedPattern: '[A-Za-z0-9-]+'
+  GitHubRepo:
+    Type: String
+    Default: lambda-aurora-efs-cicd
+    AllowedPattern: '[A-Za-z0-9-]+'
+  GitHubBranch:
+    Type: String
+    Default: master
+    AllowedPattern: '[A-Za-z0-9-]+'
+  ApplicationStackName:
+    Type: String
+    Default: infrastructure
+    AllowedPattern: '[A-Za-z0-9-]+'
+Resources:
+  PipelineArtifactsBucket:
+    DeletionPolicy: Delete
+    Type: AWS::S3::Bucket
+    Properties:
+      VersioningConfiguration:
+        Status: Enabled
+  CodePipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      ArtifactStore:
+        Type: S3
+        Location: !Ref 'PipelineArtifactsBucket'
+      RestartExecutionOnUpdate: true
+      RoleArn: !GetAtt 'CodePipelineRole.Arn'
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: Source
+              InputArtifacts: []
+              ActionTypeId:
+                Category: Source
+                Owner: ThirdParty
+                Version: 1
+                Provider: GitHub
+              OutputArtifacts:
+                - Name: SourceCode
+              Configuration:
+                Owner: !Ref 'GitHubOwner'
+                Repo: !Ref 'GitHubRepo'
+                Branch: !Ref 'GitHubBranch'
+                PollForSourceChanges: false
+                OAuthToken: !Ref 'GitHubOAuthToken'
+              RunOrder: 1
+        - Name: DEV
+          Actions:
+            - Name: DEV-BUILD
+              ActionTypeId:
+                Owner: AWS
+                Category: Build
+                Version: 1
+                Provider: CodeBuild
+              Configuration:
+                ProjectName: !Ref 'CodeBuildProject'
+              InputArtifacts:
+                - Name: SourceCode
+              OutputArtifacts:
+                - Name: DEV-Artifacts
+              RunOrder: 1
+            - Name: DEV-DEPLOY
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CloudFormation
+                Version: '1'
+              InputArtifacts:
+                - Name: DEV-Artifacts
+              Configuration:
+                ActionMode: CREATE_UPDATE # //CHANGE_SET_NAME DOESNT WORK
+                #ChangeSetName: pipeline-changeset
+                # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/continuous-delivery-codepipeline-parameter-override-functions.html#w2ab1c13c20b9
+                # https://stackoverflow.com/questions/63172241/how-to-read-a-value-from-a-json-file-in-aws-codepipeline
+                ParameterOverrides:  !Sub |
+                  {
+                     "ImageTag" : { "Fn::GetParam" : ["DEV-Artifacts", "build.hash.json", "CommitHash"]},
+                     "ImageRepositoryName": "dev-ecr",
+                     "Enviroment":"dev",
+                     "EFSpath":"/storage"
+                  }
+                Capabilities: CAPABILITY_IAM,CAPABILITY_AUTO_EXPAND
+                RoleArn: !GetAtt 'CloudformationRole.Arn'
+                StackName: !Sub 'DEV-${ApplicationStackName}'
+                TemplatePath: !Sub 'DEV-Artifacts::application-infrastructure.yaml'
+              RunOrder: 2
+        - Name: TESTING
+          Actions:
+            - Name: TESTING-BUILD
+              ActionTypeId:
+                Owner: AWS
+                Category: Build
+                Version: 1
+                Provider: CodeBuild
+              Configuration:
+                ProjectName: !Ref 'TestingCodeBuildProject'
+              InputArtifacts:
+                - Name: SourceCode
+              OutputArtifacts:
+                - Name: TESTING-Artifacts
+              RunOrder: 1
+            - Name: TESTING-DEPLOY
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CloudFormation
+                Version: '1'
+              InputArtifacts:
+                - Name: TESTING-Artifacts
+              OutputArtifacts:
+                - Name: outputA
+              Configuration:
+                ActionMode: CREATE_UPDATE
+                Capabilities: CAPABILITY_IAM,CAPABILITY_AUTO_EXPAND
+                RoleArn: !GetAtt 'CloudformationRole.Arn'
+                StackName: !Sub 'TESTING-${ApplicationStackName}'
+                TemplatePath: !Sub 'TESTING-Artifacts::application-infrastructure.yaml'
+                ParameterOverrides: !Sub |
+                  {
+                     "ImageTag" : { "Fn::GetParam" : ["TESTING-Artifacts", "build.hash.json", "CommitHash"]},
+                     "ImageRepositoryName": "dev-ecr",
+                     "Enviroment":"testing",
+                     "EFSpath":"/mnt/storage"
+                  }
+              RunOrder: 2
+        - Name: PRODUCTION
+          Actions:
+            - Name: PRODUCTION-APPROVAL
+              ActionTypeId:
+                Category: Approval
+                Owner: AWS
+                Provider: Manual
+                Version: '1'
+              RunOrder: 1
+            - Name: PRODUCTION-DEPLOY
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CloudFormation
+                Version: '1'
+              InputArtifacts:
+                - Name: TESTING-Artifacts
+              OutputArtifacts:
+                - Name: output
+              Configuration:
+                ActionMode: CREATE_UPDATE
+                Capabilities: CAPABILITY_IAM,CAPABILITY_AUTO_EXPAND
+                RoleArn: !GetAtt 'CloudformationRole.Arn'
+                StackName: !Sub 'PRODUCTION-${ApplicationStackName}'
+                TemplatePath: !Sub 'TESTING-Artifacts::application-infrastructure.yaml'
+                ParameterOverrides: !Sub |
+                  {
+                     "ImageTag" : { "Fn::GetParam" : ["TESTING-Artifacts", "build.hash.json", "CommitHash"]},
+                     "ImageRepositoryName": "dev-ecr",
+                     "Enviroment":"production",
+                     "EFSpath":"/mnt/storage"
+                  }
+              RunOrder: 2
+  GithubWebhook:
+    Type: AWS::CodePipeline::Webhook
+    Properties:
+      Authentication: GITHUB_HMAC
+      AuthenticationConfiguration:
+        SecretToken: !Ref 'GitHubOAuthToken'
+      RegisterWithThirdParty: 'true'
+      Filters:
+        - JsonPath: $.ref
+          MatchEquals: refs/heads/{Branch}
+      TargetPipeline: !Ref 'CodePipeline'
+      TargetAction: Source
+      TargetPipelineVersion: !GetAtt 'CodePipeline.Version'
+  CodePipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          Effect: Allow
+          Principal:
+            Service: codepipeline.amazonaws.com
+          Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
+  CloudformationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          Effect: Allow
+          Principal:
+            Service: cloudformation.amazonaws.com
+          Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
+  CodeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub '${AWS::StackName}-upwork-project'
+      Description: CodeBuild Project for unit testing & building .Net app
+      ServiceRole: !GetAtt 'CodeBuildServiceRole.Arn'
+      Artifacts:
+        Type: CODEPIPELINE
+        Name: !Sub '${AWS::StackName}-dev-codebuild-project'
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_MEDIUM
+        PrivilegedMode: true
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:3.0
+        EnvironmentVariables:
+          - Name: AWS_DEFAULT_REGION
+            Type: PLAINTEXT
+            Value: !Sub '${AWS::Region}'
+          - Name: AWS_ACCOUNT_ID
+            Type: PLAINTEXT
+            Value: !Sub '${AWS::AccountId}'
+          - Name: IMAGE_REPO_NAME
+            Type: PLAINTEXT
+            Value: dev-ecr
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: codebuild-dev.yaml
+      TimeoutInMinutes: 6
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-dev-codebuild-project'
+  TestingCodeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub '${AWS::StackName}-testing-codebuild'
+      Description: CodeBuild Project for unit testing & building .Net app
+      ServiceRole: !GetAtt 'CodeBuildServiceRole.Arn'
+      Artifacts:
+        Type: CODEPIPELINE
+        Name: !Sub '${AWS::StackName}-testing-codebuild'
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        PrivilegedMode: true
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:3.0
+        EnvironmentVariables:
+          - Name: AWS_DEFAULT_REGION
+            Type: PLAINTEXT
+            Value: !Sub '${AWS::Region}'
+          - Name: AWS_ACCOUNT_ID
+            Type: PLAINTEXT
+            Value: !Sub '${AWS::AccountId}'
+          - Name: IMAGE_REPO_NAME
+            Type: PLAINTEXT
+            Value: dev-ecr
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: codebuild-testing.yaml
+      TimeoutInMinutes: 6
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-testing-project'
+  CodeBuildServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${AWS::StackName}-CodeBuildServiceRole'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - codebuild.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /service-role/
+      Policies:
+        - PolicyName: !Sub '${AWS::StackName}-CodeBuildServiceRole-Policy'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - codebuild:CreateReportGroup
+                  - codebuild:CreateReport
+                  - codebuild:UpdateReport
+                  - codebuild:BatchPutTestCases
+                  - ecr:GetAuthorizationToken
+                  - ecr:*
+                Resource:
+                  - '*'
+              - Effect: Allow
+                Action:
+                  - cloudformation:DescribeStacks
+                Resource:
+                  - '*'
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*'
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:ListBucket
+                Resource:
+                  - '*'
+                  - !Sub 'arn:aws:s3:::${AWS::StackName}-codepipeline-artifact-bucket-${AWS::AccountId}/*'
+                  - !Sub 'arn:aws:s3:::${AWS::StackName}-codepipeline-artifact-bucket-${AWS::AccountId}'
+              - Effect: Allow
+                Action:
+                  - iam:PassRole
+                Resource:
+                  - '*'
+  ImageRepository:
+    Type: AWS::ECR::Repository
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Properties:
+      RepositoryName: dev-ecr
+      RepositoryPolicyText:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: Lambda,Codepipline,and codebuild retrieval
+            Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+                - codebuild.amazonaws.com
+                - codepipeline.amazonaws.com
+            Action:
+              - ecr:GetDownloadUrlForLayer
+              - ecr:BatchGetImage
+              - ecr:GetRepositoryPolicy
+              - ecr:SetRepositoryPolicy
+              - ecr:DeleteRepositoryPolicy
+#  TesingImageRepository:
+#    Type: AWS::ECR::Repository
+#    UpdateReplacePolicy: Delete
+#    DeletionPolicy: Delete
+#    Properties:
+#      RepositoryName: testing-ecr
+#      RepositoryPolicyText:
+#        Version: '2012-10-17'
+#        Statement:
+#          - Sid: Lambda,Codepipline,and codebuild retrieval
+#            Effect: Allow
+#            Principal:
+#              Service:
+#                - lambda.amazonaws.com
+#                - codebuild.amazonaws.com
+#                - codepipeline.amazonaws.com
+#            Action:
+#              - ecr:GetDownloadUrlForLayer
+#              - ecr:BatchGetImage
+#              - ecr:GetRepositoryPolicy
+#              - ecr:SetRepositoryPolicy
+#              - ecr:DeleteRepositoryPolicy
+
+Outputs:
+
+  region:
+    Description: region name
+    Value: !Sub '${AWS::Region}'

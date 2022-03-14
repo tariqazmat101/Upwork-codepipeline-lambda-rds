@@ -1,0 +1,115 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: An AWS Serverless Application that uses the ASP.NET Core framework running in Amazon Lambda.
+Parameters:
+
+  BucketName:
+    Type: String
+    Default: upworktestbucket4201112
+
+  ImageURI:
+    Type: String
+    Default: 209582769394.dkr.ecr.us-east-1.amazonaws.com/dev-ecr:latest
+
+  ImageRepositoryName:
+    Type: String
+    Default: dev-ecr
+
+  dbUserPassword:
+    NoEcho: true
+    Default: upwork
+    Type: String
+
+  dbUserName:
+    NoEcho: true
+    Default: upwork
+    Type: String
+
+  DbSize:
+    Type: String
+    Default: db.t2.small
+
+
+Conditions: { }
+Resources:
+  ApplicationBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
+
+  AspNetCoreFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: ApplicationBucket
+    Properties:
+
+      PackageType: Image
+      ImageConfig:
+        Command:
+          - lambda::lambda.LambdaEntryPoint::FunctionHandlerAsync
+      ImageUri: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ImageRepositoryName}:latest"
+      MemorySize: 256
+      Timeout: 60
+      Environment:
+        Variables:
+          bucketName: !Sub ${ApplicationBucket}
+          region: !Sub ${AWS::Region}
+
+        #      Environment:
+        #        Variables:
+        # TODO Tariq - Convert this into !Sub syntax, it looks horrible right now.
+
+        # MY_SQL_URI: !Join [ '', [ !Ref dbUserName, ':', !Ref dbUserPassword, '@(', !GetAtt DatabaseCluster.Endpoint.Address, ':', !GetAtt DatabaseCluster.Endpoint.Port, ')/mydb' ] ]
+      # Hello: pruple
+
+      Role: null
+      Policies:
+        - AWSLambda_FullAccess
+        - AmazonS3FullAccess
+      Events:
+        ProxyResource:
+          Type: Api
+          Properties:
+            Path: /{proxy+}
+            Method: ANY
+        RootResource:
+          Type: Api
+          Properties:
+            Path: /
+            Method: ANY
+    Metadata:
+      Dockerfile: Dockerfile
+      DockerContext: .
+      DockerTag: ''
+
+
+      #TODO: ADD RDS SUBNET GROUP
+#  PublicDatabaseSubnetGroup:
+#    Type: AWS::RDS::DBSubnetGroup
+#    Properties:
+#      DBSubnetGroupDescription: CloudFormation managed DB subnet group.
+#      SubnetIds: !Split [ ',',  !ImportValue LambdaVPCExperiementPublicSubnets ]
+#      # More powerful intrinsic functions, we import the Public Subnets from another stack & split it into a list like SubnetIds require
+#  DatabaseCluster:
+#    Type: AWS::RDS::DBCluster
+#    Properties:
+#      MasterUsername: !Ref dbUserName
+#      MasterUserPassword: !Ref dbUserPassword
+#      Engine: aurora
+#      DBSubnetGroupName: !Ref PublicDatabaseSubnetGroup
+#  DatabasePrimaryInstance:
+#    Type: AWS::RDS::DBInstance
+#    Properties:
+#      Engine: aurora
+#      DBClusterIdentifier: !Ref "DatabaseCluster"
+#      DBInstanceClass: !Ref DbSize
+#      DBSubnetGroupName: !Ref PublicDatabaseSubnetGroup
+#      PubliclyAccessible: true
+Outputs:
+  ApiURL:
+    Description: API endpoint URL
+    Value: !Sub 'https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/'
+
+  S3VolumeMountURL:
+    Description: S3 Bucket URL
+    Value: !GetAtt
+      - ApplicationBucket
+      - WebsiteURL

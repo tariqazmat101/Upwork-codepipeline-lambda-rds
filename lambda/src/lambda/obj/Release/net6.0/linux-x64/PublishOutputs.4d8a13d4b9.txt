@@ -1,0 +1,17 @@
+/home/tariq/upwork/github-codepipeline/lambda/src/lambda/bin/Release/lambda-publish/lambda
+/home/tariq/upwork/github-codepipeline/lambda/src/lambda/bin/Release/lambda-publish/appsettings.Development.json
+/home/tariq/upwork/github-codepipeline/lambda/src/lambda/bin/Release/lambda-publish/appsettings.json
+/home/tariq/upwork/github-codepipeline/lambda/src/lambda/bin/Release/lambda-publish/aws-lambda-tools-defaults.json
+/home/tariq/upwork/github-codepipeline/lambda/src/lambda/bin/Release/lambda-publish/lambda.dll
+/home/tariq/upwork/github-codepipeline/lambda/src/lambda/bin/Release/lambda-publish/lambda.deps.json
+/home/tariq/upwork/github-codepipeline/lambda/src/lambda/bin/Release/lambda-publish/lambda.runtimeconfig.json
+/home/tariq/upwork/github-codepipeline/lambda/src/lambda/bin/Release/lambda-publish/lambda.pdb
+/home/tariq/upwork/github-codepipeline/lambda/src/lambda/bin/Release/lambda-publish/Amazon.Lambda.APIGatewayEvents.dll
+/home/tariq/upwork/github-codepipeline/lambda/src/lambda/bin/Release/lambda-publish/Amazon.Lambda.ApplicationLoadBalancerEvents.dll
+/home/tariq/upwork/github-codepipeline/lambda/src/lambda/bin/Release/lambda-publish/Amazon.Lambda.AspNetCoreServer.dll
+/home/tariq/upwork/github-codepipeline/lambda/src/lambda/bin/Release/lambda-publish/Amazon.Lambda.Core.dll
+/home/tariq/upwork/github-codepipeline/lambda/src/lambda/bin/Release/lambda-publish/Amazon.Lambda.Logging.AspNetCore.dll
+/home/tariq/upwork/github-codepipeline/lambda/src/lambda/bin/Release/lambda-publish/Amazon.Lambda.Serialization.SystemTextJson.dll
+/home/tariq/upwork/github-codepipeline/lambda/src/lambda/bin/Release/lambda-publish/AWSSDK.Core.dll
+/home/tariq/upwork/github-codepipeline/lambda/src/lambda/bin/Release/lambda-publish/AWSSDK.S3.dll
+/home/tariq/upwork/github-codepipeline/lambda/src/lambda/bin/Release/lambda-publish/AWSSDK.SecurityToken.dll
