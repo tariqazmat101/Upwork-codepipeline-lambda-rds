@@ -22,5 +22,7 @@ There are 2 possible ways to deploy this pipeline. The easiest way
 
 
 # Upwork-codepipeline-lambda-rds
-# Upwork-codepipeline-lambda-rds
-# Upwork-codepipeline-lambda-rds
+
+##VPC Increase limits:
+This project deploys 3 VPCS(dev-vpc,test-vpc,prod-vpc) into the region you specify. It may be the case that you hit the VPC regional limit 5. You will need to contact AWS to increase the limit or use a different region altogether. 
+https://richardvigilantebooks.com/how-can-i-increase-vpc-limit-in-aws/
