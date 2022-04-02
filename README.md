@@ -4,21 +4,23 @@ Documention will soon be added.
 This project outlines a multi-enviroment CI/CD pipeline that builds & deploys .Net containers images into AWS Lambda.
 
 ### Pipeline Architecture 
-Attach immage to showcase the pipeline working. 
+Attach image to showcase the pipeline working. 
 
 ### Files Overview
 
 Below contains a list of all the new files that have been added. 
-- application-infrastructure - The file that deploys the enviroment (Lambda,EFS,VPC's,etc) 
-- Pipeline.yaml - The configuratation 
-- codebuild yaml - used to 
+- Pipeline.yaml - Cloudformation template to build the pipeline. ** You have to manually deploy this template **
+- application-infrastructure - Cloudformation template that deploys the enviroment (Lambda,EFS,VPC's,etc) 
+- Codebuild yaml - Configuration file that specifies the neccesary building steps for codebuild. 
 
-## Deployment Instructions 
-
-There are 2 possible ways to deploy this pipeline. The easiest way 
 
 ### Prerequisites
 
+First will need a Github-OATH token:
+https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token
+
+Follow the instructions in the URL and keep the token safe. You will need it later on. 
+Note: Please ensure you are the owner of the repository that is being sourced. 
 
 
 # Upwork-codepipeline-lambda-rds
