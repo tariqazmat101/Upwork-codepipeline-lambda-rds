@@ -9,9 +9,9 @@ Attach image to showcase the pipeline working.
 ### Files Overview
 
 Below contains a list of files that have been added. 
-- Pipeline.yaml - Cloudformation template to build the pipeline. ** You have to manually deploy this template **
-- application-infrastructure - Cloudformation template that deploys the enviroment (Lambda,EFS,VPC's,etc) 
-- Codebuild yaml - Configuration file that specifies the neccesary building steps for codebuild. 
+- **Pipeline.yaml** - Cloudformation template to build the pipeline. ** You have to manually deploy this template **
+- **application-infrastructure.yaml** - Cloudformation template that deploys the enviroment (Lambda,EFS,VPC's,etc) 
+- **Codebuild.yaml** - Configuration file that specifies the neccesary building steps for codebuild. 
 
 
 ### Prerequisites
