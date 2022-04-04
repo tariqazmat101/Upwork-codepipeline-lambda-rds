@@ -2,7 +2,7 @@
 Documention will soon be added. 
 
 This project outlines a multi-environment CI/CD pipeline that builds & deploys .Net containers images into AWS Lambda.
-
+![image](ali_pipeline.png)
 ## Pipeline Architecture 
 Attach image to showcase the pipeline working. 
 
