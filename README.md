@@ -1,4 +1,4 @@
-# Aurora-EFS-Lambda Multi-Enviroment CI/CD Pipeline
+# .Net Lambda Multi-Enviroment CI/CD Pipeline
 
 
 A multi-environment CI/CD pipeline that builds & deploys .net containers images into AWS Lambda.
