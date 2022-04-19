@@ -1,7 +1,7 @@
 # .Net Lambda Multi-Enviroment CI/CD Pipeline
 
 
-A multi-environment CI/CD pipeline that builds & deploys .net containers images into AWS Lambda.
+A multi-environment CI/CD pipeline that builds & deploys .Net containers images into AWS Lambda.
 ![image](ali_pipeline.png)
 
 ## Files Overview
