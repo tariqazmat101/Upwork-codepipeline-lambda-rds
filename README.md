@@ -19,6 +19,7 @@ The AWS Lambda also relies on other AWS services(Aurora DB and EFS), creating an
 We have 3 Environments, Dev, testing, and production defined in the pipeline.yml file. 
 
 Here is a breif overview of each environment: 
+
 Dev - This environment simply spins up the resources from the `Application-infrastructure.yaml` ,sources the artifacts(C# code) from a Github repo, creates an image from the artifact code and uploads that image to an ECR reposity, and then finally deploys that image into AWS Lambda. 
 
 Testing - This is exactly like Dev, except it introduces a testing phase. When the artifacts are sourced from the github repo, they are then unit-tested. If the unit test passes, the pipeline continues. If the unit test fails, the pipeline will fail and stop running. 
