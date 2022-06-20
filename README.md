@@ -8,8 +8,22 @@ A multi-environment CI/CD pipeline that builds & deploys .Net containers images 
 
 Files Added: 
 - `Pipeline.yaml` - Cloudformation template to build the pipeline. ** You have to manually deploy this template **
-- `Application-infrastructure.yaml` - Cloudformation template that Codepipeline will deploy. 
+- `Application-infrastructure.yaml` - Cloudformation template that Codepipeline will deploy. (Contains AuroraDB, EFS, and Lambda infrastructure configuration)
 - `Codebuild.yaml` - Configuration file that specifies the building steps for codebuild. 
+
+## Conceptual Understanding
+To put simply, this project is a pipeline that deploys software(.Net C# code) into AWS(Lambda). 
+However, because AWS Lambda does not support the .Net version of the C# code, we are thus required to use containerized lambda images. https://docs.aws.amazon.com/lambda/latest/dg/images-create.html
+
+The AWS Lambda also relies on other AWS services(Aurora DB and EFS), creating an environment. 
+We have 3 Environments, Dev, testing, and production defined in the pipeline.yml file. 
+
+Here is a breif overview of each environment: 
+Dev - This environment simply spins up the resources from the `Application-infrastructure.yaml` ,sources the artifacts(C# code) from a Github repo, creates an image from the artifact code and uploads that image to an ECR reposity, and then finally deploys that image into AWS Lambda. 
+
+Testing - This is exactly like Dev, except it introduces a testing phase. When the artifacts are sourced from the github repo, they are then unit-tested. If the unit test passes, the pipeline continues. If the unit test fails, the pipeline will fail and stop running. 
+
+Production - This is exactly like Testing, except the AWS resources that are spun up in this environment are more powerful,better suited for production workloads. For example, Aurora DB runs on free-tier for staging & testing, but runs on production mode in the Production environment. 
 
 
 ## Instructions
