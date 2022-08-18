@@ -12,10 +12,14 @@ Files Added:
 - `Codebuild.yaml` - Configuration file that specifies the building steps for codebuild. 
 
 ## Conceptual Understanding
+
 To put simply, this project is a pipeline that Tests and deploys .Net Code into AWS Lambda. 
 However, because AWS Lambda does not support the .Net version of the C# code, we are thus required to use containerized lambda images. https://docs.aws.amazon.com/lambda/latest/dg/images-create.html
 
-The AWS Lambda also relies on other AWS services(Aurora DB and EFS), creating an environment. 
+
+By using lambda container images, we create an image with the latest .NET runtime pre-installed and package our code inside that image. 
+
+The AWS Lambda relies on other AWS services(Aurora DB and EFS), creating an environment. 
 We have 3 Environments,Dev,testing, and production defined in the pipeline.yml file. 
 
 Here is a brief overview of each environment: 
